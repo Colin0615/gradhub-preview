@@ -1,0 +1,44 @@
+# 从正式站 gradhub.cc 取页面，发布成 GitHub Pages 镜像（给打不开新域名的网络用）。
+# 仓库本身不存页面文件；镜像关掉人机验证组件（它只认 gradhub.cc），并禁止搜索引擎收录。
+name: mirror
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+  schedule:
+    - cron: "17 */6 * * *"
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+concurrency:
+  group: pages
+  cancel-in-progress: true
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Fetch live site
+        run: |
+          set -euo pipefail
+          mkdir -p _site/fonts
+          base=https://gradhub.cc
+          curl -fsSL "$base/" -o _site/index.html
+          for f in config.js apple-touch-icon.png favicon-32.png favicon.svg og.png xhs-qr.png \
+                   fonts/OFL.txt fonts/geist-latin.woff2 fonts/geist-mono-latin.woff2; do
+            curl -fsSL "$base/$f" -o "_site/$f"
+          done
+          sed -i -E 's/^(\s*turnstileSiteKey:\s*)"[^"]*"/\1""/' _site/config.js
+          grep -q 'turnstileSiteKey: ""' _site/config.js
+          sed -i '0,/<head>/s//<head>\n<meta name="robots" content="noindex,nofollow">/' _site/index.html
+          grep -q 'name="robots"' _site/index.html
+          touch _site/.nojekyll
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+          retention-days: 1
+      - id: deployment
+        uses: actions/deploy-pages@v4
